@@ -81,4 +81,22 @@ mod tests {
         let got = r2.recv().await.unwrap();
         assert!(matches!(got, SseEvent::FleetSnapshot(_)));
     }
+
+    /// Two subscribers; drop one; remaining client still receives new sends (no panic).
+    #[tokio::test]
+    async fn two_receivers_drop_one_other_still_receives() {
+        let (tx, _) = tokio::sync::broadcast::channel::<SseEvent>(SSE_BROADCAST_CAPACITY);
+        let mut a = tx.subscribe();
+        let b = tx.subscribe();
+
+        tx.send(SseEvent::FleetSnapshot(FleetSnapshot { vehicles: vec![] }))
+            .unwrap();
+        let _ = a.recv().await.unwrap();
+        drop(b);
+
+        tx.send(SseEvent::FleetSnapshot(FleetSnapshot { vehicles: vec![] }))
+            .unwrap();
+        let ev = a.recv().await.unwrap();
+        assert!(matches!(ev, SseEvent::FleetSnapshot(_)));
+    }
 }

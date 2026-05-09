@@ -103,6 +103,27 @@ mod tests {
         assert!(!alerts.contains(&HealthAlert::OverRev));
     }
 
+    /// Six samples ~1s apart, RPM sustained above threshold; OverRev once elapsed over 5s.
+    #[test]
+    fn over_rev_after_six_telemetry_samples_one_second_apart() {
+        let start = parse_utc("2026-05-09T12:00:00Z").unwrap();
+        let mut prev: Option<Telemetry> = None;
+        for i in 0..5 {
+            let t = tel(&format!("2026-05-09T12:00:0{i}Z"), 3000, 50.0);
+            let _ = classify(&t, prev.as_ref(), TruckState::Hauling, None, Some(start));
+            prev = Some(t);
+        }
+        let t_last = tel("2026-05-09T12:00:05.001Z", 3000, 50.0);
+        let alerts = classify(
+            &t_last,
+            prev.as_ref(),
+            TruckState::Hauling,
+            None,
+            Some(start),
+        );
+        assert!(alerts.contains(&HealthAlert::OverRev));
+    }
+
     #[test]
     fn fuel_anomaly_when_drop_exceeds_ten_in_under_thirty_seconds() {
         let prev = tel("2026-05-09T00:00:00Z", 1000, 50.0);
