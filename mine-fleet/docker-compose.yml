@@ -1,0 +1,84 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: cargo run
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+      - backend-target:/app/target
+      - cargo-registry:/usr/local/cargo/registry
+    ports:
+      - "8080:8080"
+    environment:
+      RUST_LOG: info
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 120s
+
+  simulator:
+    build:
+      context: ./simulator
+      dockerfile: Dockerfile
+    command: npm run dev
+    working_dir: /app
+    volumes:
+      - ./simulator:/app
+      - simulator-node-modules:/app/node_modules
+    environment:
+      BACKEND_URL: http://backend:8080
+      HEALTH_PORT: "9090"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:9090/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    command: npm run dev -- --host 0.0.0.0 --port 3000
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - frontend-node-modules:/app/node_modules
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_BACKEND_URL: http://localhost:8080
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  backend-target:
+  cargo-registry:
+  simulator-node-modules:
+  frontend-node-modules:
