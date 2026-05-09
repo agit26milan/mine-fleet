@@ -2,16 +2,21 @@ import { useEffect } from "react";
 
 import { getBackendOrigin } from "../lib/backendUrl";
 import type { Telemetry } from "../types";
-import { HISTORY_CAP, useFleetStore } from "../store/fleetStore";
+import {
+  EMPTY_TELEMETRY_HISTORY,
+  HISTORY_CAP,
+  useFleetStore,
+} from "../store/fleetStore";
 
 export function DrillDownPanel() {
   const selectedId = useFleetStore((s) => s.selectedTruckId);
   const vehicle = useFleetStore((s) =>
     selectedId ? s.vehicles[selectedId] : undefined,
   );
-  const history = useFleetStore((s) =>
-    selectedId ? (s.historyByTruck[selectedId] ?? []) : [],
-  );
+  const history = useFleetStore((s) => {
+    if (!selectedId) return EMPTY_TELEMETRY_HISTORY;
+    return s.historyByTruck[selectedId] ?? EMPTY_TELEMETRY_HISTORY;
+  });
   const scrubIndex = useFleetStore((s) => s.scrubIndex);
   const scrubPlaying = useFleetStore((s) => s.scrubPlaying);
   const historyHydratedForSelected = useFleetStore((s) =>
@@ -21,9 +26,6 @@ export function DrillDownPanel() {
   const setSelected = useFleetStore((s) => s.setSelectedTruckId);
   const setScrubIndex = useFleetStore((s) => s.setScrubIndex);
   const setScrubPlaying = useFleetStore((s) => s.setScrubPlaying);
-  const tickScrubPlayback = useFleetStore((s) => s.tickScrubPlayback);
-  const seedHistoryFromServer = useFleetStore((s) => s.seedHistoryFromServer);
-  const markHistoryHydrated = useFleetStore((s) => s.markHistoryHydrated);
 
   useEffect(() => {
     if (!selectedId || historyHydratedForSelected) return;
@@ -40,6 +42,8 @@ export function DrillDownPanel() {
         if (!res.ok || cancelled) return;
         const data = (await res.json()) as Telemetry[];
         if (cancelled) return;
+        const { seedHistoryFromServer, markHistoryHydrated } =
+          useFleetStore.getState();
         seedHistoryFromServer(id, data);
         markHistoryHydrated(id);
       } catch {
@@ -50,20 +54,15 @@ export function DrillDownPanel() {
     return () => {
       cancelled = true;
     };
-  }, [
-    selectedId,
-    historyHydratedForSelected,
-    seedHistoryFromServer,
-    markHistoryHydrated,
-  ]);
+  }, [selectedId, historyHydratedForSelected]);
 
   useEffect(() => {
     if (!scrubPlaying || !selectedId) return;
     const timer = window.setInterval(() => {
-      tickScrubPlayback();
+      useFleetStore.getState().tickScrubPlayback();
     }, 250);
     return () => clearInterval(timer);
-  }, [scrubPlaying, selectedId, tickScrubPlayback]);
+  }, [scrubPlaying, selectedId]);
 
   if (!vehicle) return null;
 

@@ -5,6 +5,9 @@ import type { FleetSnapshot, Telemetry, VehicleState } from "../types";
 export const HISTORY_CAP = 300;
 export const TRAIL_POINT_COUNT = 50;
 
+/** Stable empty reference for Zustand selectors (never `[]` inline — breaks useSyncExternalStore). */
+export const EMPTY_TELEMETRY_HISTORY: Telemetry[] = [];
+
 export type FleetStateSlice = {
   vehicles: Record<string, VehicleState>;
   historyByTruck: Record<string, Telemetry[]>;

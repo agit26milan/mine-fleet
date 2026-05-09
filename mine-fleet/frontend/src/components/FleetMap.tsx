@@ -1,6 +1,10 @@
 import { MapContainer, Polyline, TileLayer } from "react-leaflet";
 
-import { TRAIL_POINT_COUNT, useFleetStore } from "../store/fleetStore";
+import {
+  EMPTY_TELEMETRY_HISTORY,
+  TRAIL_POINT_COUNT,
+  useFleetStore,
+} from "../store/fleetStore";
 import { TruckMarker } from "./TruckMarker";
 
 /** Simulator area (~Bali latitudes). */
@@ -19,8 +23,8 @@ export function FleetMap({ onSelectTruck }: Props) {
   const historyByTruck = useFleetStore((s) => s.historyByTruck);
 
   const selectedHistory = selectedId
-    ? (historyByTruck[selectedId] ?? [])
-    : [];
+    ? (historyByTruck[selectedId] ?? EMPTY_TELEMETRY_HISTORY)
+    : EMPTY_TELEMETRY_HISTORY;
   const trailPositions: [number, number][] =
     selectedHistory.length >= 2
       ? selectedHistory
@@ -52,11 +56,10 @@ export function FleetMap({ onSelectTruck }: Props) {
         />
       )}
       {list.map((v) => {
-        const hist = historyByTruck[v.truck_id];
+        const hist = historyByTruck[v.truck_id] ?? EMPTY_TELEMETRY_HISTORY;
         let positionOverride: { lat: number; lon: number } | undefined;
         if (
           v.truck_id === selectedId &&
-          hist &&
           hist.length > 0 &&
           scrubIndex >= 0 &&
           scrubIndex < hist.length
