@@ -1,4 +1,4 @@
-use axum::extract::{Json, Path, State};
+use axum::extract::{FromRequest, Json, Path, Request, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
@@ -7,6 +7,26 @@ use axum::Router;
 use crate::app::AppState;
 use crate::state::UpdateVehicleError;
 use crate::types::{FleetSnapshot, SseEvent, Telemetry, VehicleState};
+
+/// Newtype wrapper around Json<T> that maps ALL rejection variants
+/// (including malformed JSON / bad content-type) to 422 Unprocessable Entity
+/// instead of Axum's default 400 Bad Request.
+struct JsonBody<T>(pub T);
+
+impl<T, S> FromRequest<S> for JsonBody<T>
+where
+    T: serde::de::DeserializeOwned,
+    S: Send + Sync,
+{
+    type Rejection = ApiError;
+
+    async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
+        let Json(value) = Json::<T>::from_request(req, state)
+            .await
+            .map_err(ApiError::Json)?;
+        Ok(JsonBody(value))
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum ApiError {
@@ -51,14 +71,21 @@ async fn health_ok() -> &'static str {
     "ok"
 }
 
+#[tracing::instrument(name = "post_telemetry", skip(app, telemetry), fields(truck_id = %telemetry.truck_id))]
 async fn post_telemetry(
     State(app): State<AppState>,
-    Json(telemetry): Json<Telemetry>,
+    JsonBody(telemetry): JsonBody<Telemetry>,
 ) -> Result<Json<VehicleState>, ApiError> {
     let vehicle = {
         let mut fleet = app.fleet.write().await;
         fleet.update_vehicle(telemetry)?
     };
+    tracing::debug!(
+        truck_id = %vehicle.truck_id,
+        state = ?vehicle.state,
+        alerts = vehicle.health_alerts.len(),
+        "telemetry ingested"
+    );
     let _ = app
         .sse_tx
         .send(SseEvent::TelemetryUpdate(vehicle.clone()));

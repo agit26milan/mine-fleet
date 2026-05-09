@@ -18,8 +18,10 @@ use crate::app::AppState;
 /// is acceptable; blocking the ingest path would be worse than skipping old frames.
 pub const SSE_BROADCAST_CAPACITY: usize = 256;
 
+#[tracing::instrument(name = "sse_events", skip(app))]
 pub async fn events(State(app): State<AppState>) -> impl IntoResponse {
     let mut rx = app.sse_tx.subscribe();
+    tracing::debug!("sse client connected");
 
     let body = stream! {
         loop {
@@ -32,12 +34,16 @@ pub async fn events(State(app): State<AppState>) -> impl IntoResponse {
                             continue;
                         }
                     };
+                    tracing::trace!("sse broadcast sent");
                     yield Ok::<Event, Infallible>(Event::default().data(json));
                 }
                 Err(RecvError::Lagged(skipped)) => {
                     tracing::warn!(skipped = skipped, "sse client lagged; continuing");
                 }
-                Err(RecvError::Closed) => break,
+                Err(RecvError::Closed) => {
+                    tracing::debug!("sse broadcast channel closed; client disconnecting");
+                    break;
+                }
             }
         }
     };

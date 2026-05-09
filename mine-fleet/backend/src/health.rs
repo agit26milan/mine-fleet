@@ -7,6 +7,12 @@ use crate::types::{HealthAlert, LoadStatus, Telemetry, TruckState};
 /// `idle_since`: UTC instant when the truck entered [`TruckState::Idle`], if currently idle.
 ///
 /// `rpm_high_since`: UTC instant when RPM first exceeded 2800 in the current high-RPM streak.
+#[tracing::instrument(name = "health_classify", skip_all, fields(
+    truck_id = %telemetry.truck_id,
+    rpm = telemetry.rpm,
+    speed = telemetry.speed_kmh,
+    fuel = telemetry.fuel_pct,
+))]
 pub fn classify(
     telemetry: &Telemetry,
     prev: Option<&Telemetry>,
@@ -52,6 +58,10 @@ pub fn classify(
         if dt_ms < 30_000 && p.fuel_pct - telemetry.fuel_pct > 10.0 {
             alerts.push(HealthAlert::FuelAnomaly);
         }
+    }
+
+    if !alerts.is_empty() {
+        tracing::debug!(alerts = ?alerts, "health alerts detected");
     }
 
     alerts
