@@ -1,9 +1,11 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use chrono::{DateTime, Utc};
 
 use crate::health;
 use crate::types::{FleetSnapshot, Telemetry, TruckState, VehicleState};
+
+const TELEMETRY_HISTORY_CAP: usize = 300;
 
 #[derive(Debug, thiserror::Error)]
 pub enum UpdateVehicleError {
@@ -15,6 +17,8 @@ struct TrackedVehicle {
     vehicle: VehicleState,
     idle_entered_at: Option<DateTime<Utc>>,
     rpm_high_since: Option<DateTime<Utc>>,
+    /// Oldest → newest (max [`TELEMETRY_HISTORY_CAP`] samples).
+    telemetry_history: VecDeque<Telemetry>,
 }
 
 pub struct FleetState {
@@ -69,6 +73,15 @@ impl FleetState {
             rpm_high_since,
         );
 
+        let mut telemetry_history = prev
+            .as_ref()
+            .map(|p| p.telemetry_history.clone())
+            .unwrap_or_default();
+        telemetry_history.push_back(telemetry.clone());
+        while telemetry_history.len() > TELEMETRY_HISTORY_CAP {
+            telemetry_history.pop_front();
+        }
+
         let vehicle = VehicleState {
             truck_id: truck_id.clone(),
             state,
@@ -82,10 +95,19 @@ impl FleetState {
                 vehicle: vehicle.clone(),
                 idle_entered_at,
                 rpm_high_since,
+                telemetry_history,
             },
         );
 
         Ok(vehicle)
+    }
+
+    /// Chronological telemetry (oldest first), up to [`TELEMETRY_HISTORY_CAP`] entries.
+    pub fn get_telemetry_history(&self, truck_id: &str) -> Vec<Telemetry> {
+        self.inner
+            .get(truck_id)
+            .map(|t| t.telemetry_history.iter().cloned().collect())
+            .unwrap_or_default()
     }
 
     pub fn get_snapshot(&self) -> FleetSnapshot {

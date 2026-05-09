@@ -1,4 +1,4 @@
-use axum::extract::{Json, State};
+use axum::extract::{Json, Path, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
@@ -39,6 +39,10 @@ pub fn router(state: AppState) -> Router {
         .route("/health", get(health_ok))
         .route("/telemetry", post(post_telemetry))
         .route("/fleet", get(get_fleet))
+        .route(
+            "/vehicles/{truck_id}/history",
+            get(get_vehicle_history),
+        )
         .route("/events", get(crate::sse::events))
         .with_state(state)
 }
@@ -64,6 +68,14 @@ async fn post_telemetry(
 async fn get_fleet(State(app): State<AppState>) -> Json<FleetSnapshot> {
     let fleet = app.fleet.read().await;
     Json(fleet.get_snapshot())
+}
+
+async fn get_vehicle_history(
+    State(app): State<AppState>,
+    Path(truck_id): Path<String>,
+) -> Json<Vec<Telemetry>> {
+    let fleet = app.fleet.read().await;
+    Json(fleet.get_telemetry_history(&truck_id))
 }
 
 #[cfg(test)]
