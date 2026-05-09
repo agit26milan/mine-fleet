@@ -1,5 +1,6 @@
 //! Server-Sent Events fan-out for fleet updates.
 
+use std::convert::Infallible;
 use std::time::Duration;
 
 use async_stream::stream;
@@ -9,7 +10,6 @@ use axum::response::sse::{Event, KeepAlive, Sse};
 use tokio::sync::broadcast::error::RecvError;
 
 use crate::app::AppState;
-use crate::types::SseEvent;
 
 /// Bounded fan-out for live telemetry: capacity **256** slots.
 ///
@@ -32,10 +32,10 @@ pub async fn events(State(app): State<AppState>) -> impl IntoResponse {
                             continue;
                         }
                     };
-                    yield Ok(Event::default().data(json));
+                    yield Ok::<Event, Infallible>(Event::default().data(json));
                 }
                 Err(RecvError::Lagged(skipped)) => {
-                    tracing::warn!(skipped, "sse client lagged; continuing");
+                    tracing::warn!(skipped = skipped, "sse client lagged; continuing");
                 }
                 Err(RecvError::Closed) => break,
             }
@@ -52,7 +52,7 @@ pub async fn events(State(app): State<AppState>) -> impl IntoResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::FleetSnapshot;
+    use crate::types::{FleetSnapshot, SseEvent};
 
     #[tokio::test]
     async fn broadcast_continues_when_one_receiver_dropped() {

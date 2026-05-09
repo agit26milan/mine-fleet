@@ -3,11 +3,9 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::Router;
-use std::sync::Arc;
-use tokio::sync::RwLock;
 
 use crate::app::AppState;
-use crate::state::{FleetState, UpdateVehicleError};
+use crate::state::UpdateVehicleError;
 use crate::types::{FleetSnapshot, SseEvent, Telemetry, VehicleState};
 
 #[derive(Debug, thiserror::Error)]
@@ -71,13 +69,16 @@ async fn get_fleet(State(app): State<AppState>) -> Json<FleetSnapshot> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
+
     use crate::app::AppState;
+    use crate::state::FleetState;
     use axum::body::Body;
     use axum::http::Request;
     use axum::http::StatusCode;
+    use tokio::sync::RwLock;
     use tower::ServiceExt;
 
-    use crate::state::FleetState;
     use crate::sse::SSE_BROADCAST_CAPACITY;
 
     fn test_app_state() -> AppState {
