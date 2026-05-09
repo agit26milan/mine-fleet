@@ -13,6 +13,7 @@ use state::FleetState;
 use types::SseEvent;
 use std::net::SocketAddr;
 use tokio::sync::RwLock;
+use tower_http::cors::CorsLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
@@ -30,7 +31,7 @@ async fn main() {
         sse_tx: Arc::new(sse_tx),
     };
 
-    let app = api::router(app_state);
+    let app = api::router(app_state).layer(CorsLayer::permissive());
     let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
 
