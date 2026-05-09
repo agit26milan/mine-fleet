@@ -1,12 +1,16 @@
 mod api;
+mod app;
 mod health;
+mod sse;
 mod state;
 mod types;
 
 use std::sync::Arc;
 
-use api::AppState;
+use app::AppState;
+use sse::SSE_BROADCAST_CAPACITY;
 use state::FleetState;
+use types::SseEvent;
 use std::net::SocketAddr;
 use tokio::sync::RwLock;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -20,8 +24,10 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
+    let (sse_tx, _) = tokio::sync::broadcast::channel::<SseEvent>(SSE_BROADCAST_CAPACITY);
     let app_state = AppState {
         fleet: Arc::new(RwLock::new(FleetState::new())),
+        sse_tx: Arc::new(sse_tx),
     };
 
     let app = api::router(app_state);

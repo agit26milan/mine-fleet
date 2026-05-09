@@ -6,13 +6,9 @@ use axum::Router;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+use crate::app::AppState;
 use crate::state::{FleetState, UpdateVehicleError};
-use crate::types::{FleetSnapshot, Telemetry, VehicleState};
-
-#[derive(Clone)]
-pub struct AppState {
-    pub fleet: Arc<RwLock<FleetState>>,
-}
+use crate::types::{FleetSnapshot, SseEvent, Telemetry, VehicleState};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ApiError {
@@ -45,6 +41,7 @@ pub fn router(state: AppState) -> Router {
         .route("/health", get(health_ok))
         .route("/telemetry", post(post_telemetry))
         .route("/fleet", get(get_fleet))
+        .route("/events", get(crate::sse::events))
         .with_state(state)
 }
 
@@ -60,6 +57,9 @@ async fn post_telemetry(
         let mut fleet = app.fleet.write().await;
         fleet.update_vehicle(telemetry)?
     };
+    let _ = app
+        .sse_tx
+        .send(SseEvent::TelemetryUpdate(vehicle.clone()));
     Ok(Json(vehicle))
 }
 
@@ -71,18 +71,26 @@ async fn get_fleet(State(app): State<AppState>) -> Json<FleetSnapshot> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::AppState;
     use axum::body::Body;
     use axum::http::Request;
     use axum::http::StatusCode;
     use tower::ServiceExt;
 
     use crate::state::FleetState;
+    use crate::sse::SSE_BROADCAST_CAPACITY;
+
+    fn test_app_state() -> AppState {
+        let (sse_tx, _) = tokio::sync::broadcast::channel(SSE_BROADCAST_CAPACITY);
+        AppState {
+            fleet: Arc::new(RwLock::new(FleetState::new())),
+            sse_tx: Arc::new(sse_tx),
+        }
+    }
 
     #[tokio::test]
     async fn post_telemetry_malformed_json_is_unprocessable() {
-        let app = router(AppState {
-            fleet: Arc::new(RwLock::new(FleetState::new())),
-        });
+        let app = router(test_app_state());
         let req = Request::builder()
             .method("POST")
             .uri("/telemetry")
@@ -95,9 +103,7 @@ mod tests {
 
     #[tokio::test]
     async fn post_telemetry_invalid_timestamp_is_unprocessable() {
-        let app = router(AppState {
-            fleet: Arc::new(RwLock::new(FleetState::new())),
-        });
+        let app = router(test_app_state());
         let body = serde_json::json!({
             "truck_id": "t1",
             "timestamp": "not-rfc3339",
