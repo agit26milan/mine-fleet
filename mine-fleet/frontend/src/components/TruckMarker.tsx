@@ -7,12 +7,15 @@ import { markerColorForVehicle } from "./markerColors";
 
 type Props = {
   vehicle: VehicleState;
+  /** When set (e.g. history scrub), marker uses this position instead of live telemetry. */
+  positionOverride?: { lat: number; lon: number };
   onSelect: (id: string) => void;
 };
 
-export function TruckMarker({ vehicle, onSelect }: Props) {
+export function TruckMarker({ vehicle, positionOverride, onSelect }: Props) {
   const ref = useRef<LeafletCircleMarker>(null);
-  const { lat, lon } = vehicle.telemetry;
+  const lat = positionOverride?.lat ?? vehicle.telemetry.lat;
+  const lon = positionOverride?.lon ?? vehicle.telemetry.lon;
   const color = markerColorForVehicle(vehicle);
 
   useEffect(() => {

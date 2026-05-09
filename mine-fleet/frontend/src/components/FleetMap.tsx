@@ -1,6 +1,6 @@
-import { MapContainer, TileLayer } from "react-leaflet";
+import { MapContainer, Polyline, TileLayer } from "react-leaflet";
 
-import { useFleetStore } from "../store/fleetStore";
+import { TRAIL_POINT_COUNT, useFleetStore } from "../store/fleetStore";
 import { TruckMarker } from "./TruckMarker";
 
 /** Simulator area (~Bali latitudes). */
@@ -14,6 +14,19 @@ type Props = {
 export function FleetMap({ onSelectTruck }: Props) {
   const vehicles = useFleetStore((s) => s.vehicles);
   const list = Object.values(vehicles);
+  const selectedId = useFleetStore((s) => s.selectedTruckId);
+  const scrubIndex = useFleetStore((s) => s.scrubIndex);
+  const historyByTruck = useFleetStore((s) => s.historyByTruck);
+
+  const selectedHistory = selectedId
+    ? (historyByTruck[selectedId] ?? [])
+    : [];
+  const trailPositions: [number, number][] =
+    selectedHistory.length >= 2
+      ? selectedHistory
+          .slice(-TRAIL_POINT_COUNT)
+          .map((t) => [t.lat, t.lon] as [number, number])
+      : [];
 
   return (
     <MapContainer
@@ -26,9 +39,40 @@ export function FleetMap({ onSelectTruck }: Props) {
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      {list.map((v) => (
-        <TruckMarker key={v.truck_id} vehicle={v} onSelect={onSelectTruck} />
-      ))}
+      {trailPositions.length >= 2 && (
+        <Polyline
+          positions={trailPositions}
+          pathOptions={{
+            color: "#1d4ed8",
+            weight: 4,
+            opacity: 0.88,
+            lineCap: "round",
+            lineJoin: "round",
+          }}
+        />
+      )}
+      {list.map((v) => {
+        const hist = historyByTruck[v.truck_id];
+        let positionOverride: { lat: number; lon: number } | undefined;
+        if (
+          v.truck_id === selectedId &&
+          hist &&
+          hist.length > 0 &&
+          scrubIndex >= 0 &&
+          scrubIndex < hist.length
+        ) {
+          const t = hist[scrubIndex];
+          positionOverride = { lat: t.lat, lon: t.lon };
+        }
+        return (
+          <TruckMarker
+            key={v.truck_id}
+            vehicle={v}
+            positionOverride={positionOverride}
+            onSelect={onSelectTruck}
+          />
+        );
+      })}
     </MapContainer>
   );
 }
