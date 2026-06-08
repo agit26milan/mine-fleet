@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 
 use crate::health;
 use crate::types::{FleetSnapshot, Telemetry, TruckState, VehicleState};
+use crate::util;
 
 const TELEMETRY_HISTORY_CAP: usize = 300;
 
@@ -35,14 +36,14 @@ impl FleetState {
     /// Updates fleet state from a telemetry sample. `telemetry.timestamp` must be valid RFC3339 UTC.
     pub fn update_vehicle(&mut self, telemetry: Telemetry) -> Result<VehicleState, UpdateVehicleError> {
         let truck_id = telemetry.truck_id.clone();
-        let now_utc = parse_utc(&telemetry.timestamp).ok_or(UpdateVehicleError::InvalidTimestamp)?;
+        let now_utc = util::parse_utc(&telemetry.timestamp).ok_or(UpdateVehicleError::InvalidTimestamp)?;
 
         let prev = self.inner.remove(&truck_id);
 
-        let state = prev
-            .as_ref()
-            .map(|p| p.vehicle.state)
-            .unwrap_or(TruckState::Idle);
+        let state = determine_state(
+            prev.as_ref().map(|p| p.vehicle.state),
+            &telemetry,
+        );
 
         let idle_entered_at = match state {
             TruckState::Idle => match &prev {
@@ -118,10 +119,27 @@ impl FleetState {
     }
 }
 
-fn parse_utc(s: &str) -> Option<DateTime<Utc>> {
-    DateTime::parse_from_rfc3339(s.trim())
-        .ok()
-        .map(|dt| dt.with_timezone(&Utc))
+fn determine_state(prev_state: Option<TruckState>, telemetry: &Telemetry) -> TruckState {
+    let prev = prev_state.unwrap_or(TruckState::Idle);
+
+    if telemetry.speed_kmh > 5.0 {
+        match telemetry.load_status {
+            crate::types::LoadStatus::Loaded => TruckState::Hauling,
+            crate::types::LoadStatus::Empty => TruckState::Returning,
+        }
+    } else if telemetry.load_status == crate::types::LoadStatus::Loaded {
+        match prev {
+            TruckState::Hauling | TruckState::Crushing => TruckState::Crushing,
+            _ => TruckState::Loading,
+        }
+    } else if telemetry.speed_kmh == 0.0 && telemetry.rpm < 1000 {
+        TruckState::Idle
+    } else {
+        match prev {
+            TruckState::Returning | TruckState::Idle => TruckState::Loading,
+            _ => prev,
+        }
+    }
 }
 
 #[cfg(test)]

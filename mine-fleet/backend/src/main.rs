@@ -4,6 +4,7 @@ mod health;
 mod sse;
 mod state;
 mod types;
+mod util;
 
 use std::sync::Arc;
 

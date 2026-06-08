@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 
 use crate::types::{HealthAlert, LoadStatus, Telemetry, TruckState};
+use crate::util;
 
 /// Pure health classification: no I/O, no mutation, no wall-clock reads.
 ///
@@ -30,7 +31,7 @@ pub fn classify(
         alerts.push(HealthAlert::LowFuel);
     }
 
-    let Some(now) = parse_utc(&telemetry.timestamp) else {
+    let Some(now) = util::parse_utc(&telemetry.timestamp) else {
         return alerts;
     };
 
@@ -51,7 +52,7 @@ pub fn classify(
     }
 
     if let Some(p) = prev {
-        let Some(t_prev) = parse_utc(&p.timestamp) else {
+        let Some(t_prev) = util::parse_utc(&p.timestamp) else {
             return alerts;
         };
         let dt_ms = (now - t_prev).num_milliseconds();
@@ -65,12 +66,6 @@ pub fn classify(
     }
 
     alerts
-}
-
-fn parse_utc(s: &str) -> Option<DateTime<Utc>> {
-    DateTime::parse_from_rfc3339(s.trim())
-        .ok()
-        .map(|dt| dt.with_timezone(&Utc))
 }
 
 #[cfg(test)]
@@ -95,7 +90,7 @@ mod tests {
     fn over_rev_requires_more_than_five_seconds_above_threshold() {
         let t0 = tel("2026-05-09T00:00:00Z", 3000, 50.0);
         let t5 = tel("2026-05-09T00:00:05.001Z", 3000, 50.0);
-        let start = parse_utc(&t0.timestamp).unwrap();
+        let start = util::parse_utc(&t0.timestamp).unwrap();
         let alerts = classify(
             &t5,
             Some(&t0),
@@ -116,7 +111,7 @@ mod tests {
     /// Six samples ~1s apart, RPM sustained above threshold; OverRev once elapsed over 5s.
     #[test]
     fn over_rev_after_six_telemetry_samples_one_second_apart() {
-        let start = parse_utc("2026-05-09T12:00:00Z").unwrap();
+        let start = util::parse_utc("2026-05-09T12:00:00Z").unwrap();
         let mut prev: Option<Telemetry> = None;
         for i in 0..5 {
             let t = tel(&format!("2026-05-09T12:00:0{i}Z"), 3000, 50.0);
