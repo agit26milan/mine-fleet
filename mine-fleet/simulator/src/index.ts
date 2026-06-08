@@ -180,7 +180,7 @@ function buildTelemetry(rt: TruckRuntime, cyclePosMs: number): Telemetry {
   let lon = jitter(simLon);
 
   const inCrushing = state === "Crushing";
-  const crushingPhaseStart = 30_000 + 60_000;
+  const crushingPhaseStart = PHASES[0]!.durationMs + PHASES[1]!.durationMs;
   const msIntoCrushing =
     inCrushing ? cyclePosMs - crushingPhaseStart : -1;
   const crushingDropout =
